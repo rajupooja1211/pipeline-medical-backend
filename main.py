@@ -106,7 +106,7 @@ async def elevenlabs_tts(text: str, emotions: Dict[str, float] = {}) -> tuple:
                   "voice_settings": {"stability": stability, "similarity_boost": 0.75}},
         )
     ms = (time.time() - start) * 1000
-     print(f"🎤 TTS status: {resp.status_code}, size: {len(resp.content)}, body: {resp.content[:200]}")  # ADD THIS
+    print(f"🎤 TTS status: {resp.status_code}, size: {len(resp.content)}, body: {resp.content[:200]}")  # ADD THIS
     return (resp.content if resp.status_code == 200 else b""), ms
 
 # ═══ ENDPOINTS ═══
