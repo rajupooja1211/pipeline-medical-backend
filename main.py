@@ -2,7 +2,7 @@
 Medical Assistant Backend — 4-Service Pipeline (Web Demo)
 """
 
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, List
@@ -13,7 +13,6 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
-print(f"🔑 ElevenLabs key length: {len(ELEVENLABS_API_KEY)}, starts: '{ELEVENLABS_API_KEY[:8]}'")  # ADD THIS LINE
 ELEVENLABS_VOICE_ID = os.environ.get("ELEVENLABS_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")
 
 conversations: Dict[str, dict] = {}
@@ -102,11 +101,12 @@ async def elevenlabs_tts(text: str, emotions: Dict[str, float] = {}) -> tuple:
         resp = await client.post(
             f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}",
             headers={"xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json"},
-            json={"text": text, "model_id": "eleven_turbo_v2_5",
+            json={"text": text, "model_id": "eleven_flash_v2_5",
                   "voice_settings": {"stability": stability, "similarity_boost": 0.75}},
         )
     ms = (time.time() - start) * 1000
-    print(f"🎤 TTS status: {resp.status_code}, size: {len(resp.content)}, body: {resp.content[:200]}")  # ADD THIS
+    if resp.status_code != 200:
+        print(f"❌ TTS error: {resp.status_code} {resp.content[:200]}")
     return (resp.content if resp.status_code == 200 else b""), ms
 
 # ═══ ENDPOINTS ═══
@@ -161,6 +161,16 @@ async def start_session(session_id: str = "web-default"):
     audio_resp, tts_ms = await elevenlabs_tts(question)
     audio_b64 = base64.b64encode(audio_resp).decode() if audio_resp else ""
     return {"response": question, "audio_base64": audio_b64, "metrics": {"tts_ms": round(tts_ms,1)}}
+
+@app.post("/api/tts")
+async def tts_only(request: Request):
+    body = await request.json()
+    text = body.get("text", "")
+    if not text:
+        return {"audio_base64": ""}
+    audio_resp, tts_ms = await elevenlabs_tts(text)
+    audio_b64 = base64.b64encode(audio_resp).decode() if audio_resp else ""
+    return {"audio_base64": audio_b64, "tts_ms": round(tts_ms, 1)}
 
 @app.get("/health")
 async def health():
