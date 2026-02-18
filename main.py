@@ -13,6 +13,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
+print(f"🔑 ElevenLabs key length: {len(ELEVENLABS_API_KEY)}, starts: '{ELEVENLABS_API_KEY[:8]}'")  # ADD THIS LINE
 ELEVENLABS_VOICE_ID = os.environ.get("ELEVENLABS_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")
 
 conversations: Dict[str, dict] = {}
