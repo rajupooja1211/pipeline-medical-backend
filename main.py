@@ -173,6 +173,23 @@ async def tts_only(request: Request):
     audio_b64 = base64.b64encode(audio_resp).decode() if audio_resp else ""
     return {"audio_base64": audio_b64, "tts_ms": round(tts_ms, 1)}
 
+@app.get("/api/voices")
+async def get_voices():
+    """Return voices available on this ElevenLabs account."""
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.get(
+            "https://api.elevenlabs.io/v1/voices",
+            headers={"xi-api-key": ELEVENLABS_API_KEY},
+        )
+    if resp.status_code != 200:
+        return {"voices": []}
+    data = resp.json()
+    voices = [
+        {"voice_id": v["voice_id"], "name": v["name"], "category": v.get("category", "generated")}
+        for v in sorted(data.get("voices", []), key=lambda x: x["name"])
+    ]
+    return {"voices": voices, "default": ELEVENLABS_VOICE_ID}
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "4-service-pipeline"}
