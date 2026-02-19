@@ -94,12 +94,13 @@ async def whisper_transcribe(audio_bytes: bytes) -> tuple:
     return "", ms
 
 # ═══ SERVICE 4: ElevenLabs TTS ═══
-async def elevenlabs_tts(text: str, emotions: Dict[str, float] = {}) -> tuple:
+async def elevenlabs_tts(text: str, emotions: Dict[str, float] = {}, voice_id: str = "") -> tuple:
     start = time.time()
+    vid = voice_id or ELEVENLABS_VOICE_ID
     stability = 0.6 if max(emotions, key=emotions.get, default="neutral") in ["pain","distress","sadness"] else 0.5
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.post(
-            f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}",
+            f"https://api.elevenlabs.io/v1/text-to-speech/{vid}",
             headers={"xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json"},
             json={"text": text, "model_id": "eleven_flash_v2_5",
                   "voice_settings": {"stability": stability, "similarity_boost": 0.75}},
@@ -111,7 +112,7 @@ async def elevenlabs_tts(text: str, emotions: Dict[str, float] = {}) -> tuple:
 
 # ═══ ENDPOINTS ═══
 @app.post("/api/web-chat")
-async def web_chat(audio: UploadFile = File(...), session_id: str = Form("web-default")):
+async def web_chat(audio: UploadFile = File(...), session_id: str = Form("web-default"), voice_id: str = Form("")):
     total_start = time.time()
     if session_id not in conversations:
         conversations[session_id] = {"step": 0, "answers": []}
@@ -133,7 +134,7 @@ async def web_chat(audio: UploadFile = File(...), session_id: str = Form("web-de
     final_response = get_empathy_prefix(emotions) + question
     logic_ms = (time.time() - logic_start) * 1000
 
-    audio_resp, tts_ms = await elevenlabs_tts(final_response, emotions)
+    audio_resp, tts_ms = await elevenlabs_tts(final_response, emotions, voice_id=voice_id or ELEVENLABS_VOICE_ID)
     audio_b64 = base64.b64encode(audio_resp).decode() if audio_resp else ""
 
     total_ms = (time.time() - total_start) * 1000
@@ -154,11 +155,11 @@ async def web_chat(audio: UploadFile = File(...), session_id: str = Form("web-de
             "audio_base64": audio_b64, "metrics": metrics}
 
 @app.get("/api/start-session")
-async def start_session(session_id: str = "web-default"):
+async def start_session(session_id: str = "web-default", voice_id: str = ""):
     conversations[session_id] = {"step": 0, "answers": []}
     session = conversations[session_id]
     question = get_next_question(session, "")
-    audio_resp, tts_ms = await elevenlabs_tts(question)
+    audio_resp, tts_ms = await elevenlabs_tts(question, voice_id=voice_id or ELEVENLABS_VOICE_ID)
     audio_b64 = base64.b64encode(audio_resp).decode() if audio_resp else ""
     return {"response": question, "audio_base64": audio_b64, "metrics": {"tts_ms": round(tts_ms,1)}}
 
