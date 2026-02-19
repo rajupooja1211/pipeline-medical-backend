@@ -4,15 +4,14 @@ Medical Assistant Backend — 4-Service Pipeline (Web Demo)
 
 from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Dict, List
-import re, os, time, base64, httpx, json
+import re, os, time, base64, httpx
 
 app = FastAPI(title="Medical Assistant — 4-Service Pipeline")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-OPENAI_API_KEY     = os.environ.get("OPENAI_API_KEY", "")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
 ELEVENLABS_VOICE_ID = os.environ.get("ELEVENLABS_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")
 
@@ -94,7 +93,7 @@ async def whisper_transcribe(audio_bytes: bytes) -> tuple:
     print(f"❌ Whisper error: {resp.status_code} {resp.text}")
     return "", ms
 
-# ═══ SERVICE 4: ElevenLabs TTS (non-streaming, kept for start-session) ═══
+# ═══ SERVICE 4: ElevenLabs TTS ═══
 async def elevenlabs_tts(text: str, emotions: Dict[str, float] = {}) -> tuple:
     start = time.time()
     stability = 0.6 if max(emotions, key=emotions.get, default="neutral") in ["pain","distress","sadness"] else 0.5
@@ -111,9 +110,6 @@ async def elevenlabs_tts(text: str, emotions: Dict[str, float] = {}) -> tuple:
     return (resp.content if resp.status_code == 200 else b""), ms
 
 # ═══ ENDPOINTS ═══
-
-# /api/web-chat — STT + Sentiment + Logic only (NO TTS). Returns JSON fast.
-# Frontend calls /api/tts-stream separately for streaming audio.
 @app.post("/api/web-chat")
 async def web_chat(audio: UploadFile = File(...), session_id: str = Form("web-default")):
     total_start = time.time()
@@ -126,7 +122,7 @@ async def web_chat(audio: UploadFile = File(...), session_id: str = Form("web-de
 
     if not transcript or len(transcript.strip()) < 1:
         q = get_next_question(session, "") if session["step"] == 0 else "I didn't catch that. Could you repeat?"
-        return {"transcript": "", "response": q, "emotions": {}, "metrics": {"whisper_ms": round(whisper_ms,1), "error": "no_speech"}}
+        return {"transcript": "", "response": q, "emotions": {}, "audio_base64": "", "metrics": {"whisper_ms": round(whisper_ms,1), "error": "no_speech"}}
 
     sentiment_start = time.time()
     emotions = analyze_sentiment(transcript)
@@ -137,64 +133,26 @@ async def web_chat(audio: UploadFile = File(...), session_id: str = Form("web-de
     final_response = get_empathy_prefix(emotions) + question
     logic_ms = (time.time() - logic_start) * 1000
 
+    audio_resp, tts_ms = await elevenlabs_tts(final_response, emotions)
+    audio_b64 = base64.b64encode(audio_resp).decode() if audio_resp else ""
+
     total_ms = (time.time() - total_start) * 1000
     top_emotion = max(emotions, key=emotions.get)
-    metrics = {
-        "whisper_ms":   round(whisper_ms, 1),
-        "sentiment_ms": round(sentiment_ms, 1),
-        "logic_ms":     round(logic_ms, 1),
-        "tts_ms":       0,   # TTS is now streamed separately
-        "total_ms":     round(total_ms, 1),
-        "top_emotion":  top_emotion,
-        "top_score":    round(emotions.get(top_emotion, 0), 3),
-    }
+    metrics = {"whisper_ms": round(whisper_ms,1), "sentiment_ms": round(sentiment_ms,1),
+               "logic_ms": round(logic_ms,1), "tts_ms": round(tts_ms,1), "total_ms": round(total_ms,1),
+               "top_emotion": top_emotion, "top_score": round(emotions.get(top_emotion,0),3)}
 
-    print(f"\n═══ 📊 PIPELINE (no TTS) ═══")
-    print(f"Whisper: {whisper_ms:.0f}ms | Sentiment: {sentiment_ms:.1f}ms | Logic: {logic_ms:.1f}ms | Total: {total_ms:.0f}ms")
-    print(f"\"{transcript[:50]}\" → {top_emotion}")
+    print(f"\n═══════════════ 📊 4-SERVICE PIPELINE ═══════════════")
+    print(f"📊 Whisper:    {whisper_ms:.0f}ms | Sentiment: {sentiment_ms:.1f}ms")
+    print(f"📊 Logic:      {logic_ms:.1f}ms | TTS: {tts_ms:.0f}ms | Total: {total_ms:.0f}ms")
+    print(f"📊 \"{transcript[:50]}\" → {top_emotion}")
+    print(f"═══════════════════════════════════════════════════════\n")
 
     metrics_log.append({"session_id": session_id, "step": session["step"], "metrics": metrics, "transcript": transcript})
 
-    return {"transcript": transcript, "response": final_response, "emotions": emotions, "metrics": metrics}
+    return {"transcript": transcript, "response": final_response, "emotions": emotions,
+            "audio_base64": audio_b64, "metrics": metrics}
 
-
-# /api/tts-stream — streams raw MP3 chunks from ElevenLabs directly to browser
-# Browser Web Audio API plays each chunk as it arrives (~200ms to first audio)
-@app.post("/api/tts-stream")
-async def tts_stream(request: Request):
-    body = await request.json()
-    text = body.get("text", "")
-    emotions = body.get("emotions", {})
-    if not text:
-        return {"error": "no text"}
-
-    stability = 0.6 if emotions and max(emotions, key=emotions.get, default="neutral") in ["pain","distress","sadness"] else 0.5
-
-    async def generate():
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            async with client.stream(
-                "POST",
-                f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}/stream",
-                headers={"xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json"},
-                json={
-                    "text": text,
-                    "model_id": "eleven_flash_v2_5",
-                    "voice_settings": {"stability": stability, "similarity_boost": 0.75},
-                    "optimize_streaming_latency": 3,  # max latency optimisation
-                },
-            ) as resp:
-                if resp.status_code != 200:
-                    body = await resp.aread()
-                    print(f"❌ TTS stream error: {resp.status_code} {body[:200]}")
-                    return
-                async for chunk in resp.aiter_bytes(chunk_size=4096):
-                    if chunk:
-                        yield chunk
-
-    return StreamingResponse(generate(), media_type="audio/mpeg")
-
-
-# /api/start-session — greeting (still uses non-streaming TTS, one-time only)
 @app.get("/api/start-session")
 async def start_session(session_id: str = "web-default"):
     conversations[session_id] = {"step": 0, "answers": []}
@@ -202,8 +160,17 @@ async def start_session(session_id: str = "web-default"):
     question = get_next_question(session, "")
     audio_resp, tts_ms = await elevenlabs_tts(question)
     audio_b64 = base64.b64encode(audio_resp).decode() if audio_resp else ""
-    return {"response": question, "audio_base64": audio_b64, "metrics": {"tts_ms": round(tts_ms, 1)}}
+    return {"response": question, "audio_base64": audio_b64, "metrics": {"tts_ms": round(tts_ms,1)}}
 
+@app.post("/api/tts")
+async def tts_only(request: Request):
+    body = await request.json()
+    text = body.get("text", "")
+    if not text:
+        return {"audio_base64": ""}
+    audio_resp, tts_ms = await elevenlabs_tts(text)
+    audio_b64 = base64.b64encode(audio_resp).decode() if audio_resp else ""
+    return {"audio_base64": audio_b64, "tts_ms": round(tts_ms, 1)}
 
 @app.get("/health")
 async def health():
@@ -215,4 +182,4 @@ async def get_metrics():
 
 @app.get("/")
 async def root():
-    return {"message": "4-Service Pipeline", "endpoints": ["/api/web-chat", "/api/tts-stream", "/api/start-session", "/health", "/metrics"]}
+    return {"message": "4-Service Pipeline", "endpoints": ["/api/web-chat","/api/start-session","/health","/metrics"]}
