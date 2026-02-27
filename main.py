@@ -241,8 +241,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-OPENAI_API_KEY     = os.environ.get("OPENAI_API_KEY", "")
-ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
+OPENAI_API_KEY      = os.environ.get("OPENAI_API_KEY", "")
+GROQ_API_KEY        = os.environ.get("GROQ_API_KEY", "")
+ELEVENLABS_API_KEY  = os.environ.get("ELEVENLABS_API_KEY", "")
 ELEVENLABS_VOICE_ID = os.environ.get("ELEVENLABS_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")
 
 conversations: Dict[str, dict] = {}
@@ -407,10 +408,10 @@ async def whisper_transcribe(audio_bytes: bytes) -> tuple:
     start = time.time()
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.post(
-            "https://api.openai.com/v1/audio/transcriptions",
-            headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
+            "https://api.groq.com/openai/v1/audio/transcriptions",
+            headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
             files={"file": ("audio.webm", audio_bytes, "audio/webm")},
-            data={"model": "whisper-1", "language": "en"},
+            data={"model": "whisper-large-v3-turbo", "language": "en"},
         )
     ms = (time.time() - start) * 1000
     if resp.status_code == 200:
