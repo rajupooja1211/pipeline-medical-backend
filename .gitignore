@@ -1,3 +1,23 @@
 __pycache__/
 .env
 .DS_Store
+
+# Virtual environment
+venv/
+env/
+
+# SpeechBrain model weights — Render downloads these on startup
+pretrained_models/
+
+# Python cache
+*.pyc
+*.pyo
+
+# Audio files
+*.wav
+*.mp3
+*.webm
+
+# IDE
+.vscode/
+.idea/
