@@ -258,14 +258,34 @@ async def _load_model_background():
     await loop.run_in_executor(None, load_model)
     print("✅ SpeechBrain model loaded and ready")
 
+async def _warmup_groq():
+    """
+    Pre-warm the Groq API connection at startup.
+    Eliminates the 3-5s TLS handshake cost on the first user request.
+    """
+    try:
+        # Minimal valid WAV: header + silence — just to open the connection
+        silence_wav = (
+            b"RIFF$\x00\x00\x00WAVEfmt \x10\x00\x00\x00"
+            b"\x01\x00\x01\x00\x80>\x00\x00\x00}\x00\x00"
+            b"\x02\x00\x10\x00data\x00\x00\x00\x00"
+        )
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            await client.post(
+                "https://api.groq.com/openai/v1/audio/transcriptions",
+                headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+                files={"file": ("warmup.wav", silence_wav, "audio/wav")},
+                data={"model": "whisper-large-v3-turbo", "language": "en"},
+            )
+        print("🔥 Groq API connection warmed up")
+    except Exception as e:
+        print(f"⚠️  Groq warmup skipped: {e}")
+
 @app.on_event("startup")
 async def startup_event():
-    """
-    Fire-and-forget model loading — port binds immediately so Render
-    health check passes, model downloads in background (~300MB first run).
-    """
     asyncio.create_task(_load_model_background())
-    print("🚀 Server started — SpeechBrain loading in background")
+    asyncio.create_task(_warmup_groq())
+    print("🚀 Server started — warming up Groq + librosa in background")
 
 
 # ═══════════════════════════════════════════════════════════
