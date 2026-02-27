@@ -12,4 +12,4 @@ torchaudio==2.1.0
 speechbrain==0.5.13
 huggingface_hub==0.19.4
 transformers==4.35.2
-numpy>=1.24.0
+numpy>=1.24.0,<2
