@@ -34,7 +34,7 @@ TARGET_SR     = 16000
 TRIM_SECONDS  = 3
 DEVICE        = 0 if torch.cuda.is_available() else -1   # 0=GPU, -1=CPU for transformers
 DEVICE_LABEL  = "GPU" if DEVICE == 0 else "CPU"
-MODEL_SOURCE  = "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
+MODEL_SOURCE  = "superb/wav2vec2-base-superb-er"
 
 print(f"ℹ️  Audio emotion will run on: {DEVICE_LABEL}")
 
@@ -127,6 +127,11 @@ _AVD_MAP = {
     "disgust":    (0.60,    0.10,    0.50),
     "happiness":  (0.75,    0.85,    0.70),
     "surprise":   (0.70,    0.60,    0.40),
+    # superb/wav2vec2-base-superb-er abbreviated labels
+    "neu":        (0.45,    0.55,    0.50),
+    "hap":        (0.75,    0.85,    0.70),
+    "ang":        (0.85,    0.15,    0.80),
+    "exc":        (0.90,    0.70,    0.75),   # excited
 }
 
 
@@ -193,6 +198,11 @@ _MEDICAL_MAP = {
     "surprised": "confusion",
     "surprise":  "confusion",
     "neutral":   "neutral",
+    # superb/wav2vec2-base-superb-er abbreviated labels
+    "neu":       "neutral",
+    "hap":       "relief",
+    "ang":       "frustration",
+    "exc":       "relief",    # excited → positive/relief
 }
 
 
