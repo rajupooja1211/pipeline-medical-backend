@@ -463,26 +463,27 @@ async def elevenlabs_tts(
     valence = audio_result.get("valence", 0.5)
 
     # Emotion → voice settings matrix
-    # stability:        higher = calmer/more consistent voice
-    # similarity_boost: how closely it tracks the base voice character
-    # style:            expressiveness (0–1)
+    # stability:        lower = more expressive/varied, higher = calm/monotone
+    # similarity_boost: voice character consistency
+    # style:            expressiveness — make this very different per emotion
     tuning = {
-        "pain":        {"stability": 0.65, "similarity_boost": 0.75, "style": 0.40},
-        "distress":    {"stability": 0.60, "similarity_boost": 0.70, "style": 0.50},
-        "anxiety":     {"stability": 0.55, "similarity_boost": 0.72, "style": 0.45},
-        "sadness":     {"stability": 0.70, "similarity_boost": 0.78, "style": 0.30},
-        "frustration": {"stability": 0.45, "similarity_boost": 0.68, "style": 0.55},
-        "fatigue":     {"stability": 0.72, "similarity_boost": 0.80, "style": 0.20},
-        "relief":      {"stability": 0.50, "similarity_boost": 0.75, "style": 0.35},
-        "neutral":     {"stability": 0.50, "similarity_boost": 0.75, "style": 0.30},
-    }.get(top, {"stability": 0.50, "similarity_boost": 0.75, "style": 0.30})
+        "pain":        {"stability": 0.30, "similarity_boost": 0.70, "style": 0.75},
+        "distress":    {"stability": 0.25, "similarity_boost": 0.65, "style": 0.80},
+        "anxiety":     {"stability": 0.30, "similarity_boost": 0.70, "style": 0.70},
+        "sadness":     {"stability": 0.80, "similarity_boost": 0.85, "style": 0.10},
+        "frustration": {"stability": 0.20, "similarity_boost": 0.60, "style": 0.85},
+        "fatigue":     {"stability": 0.90, "similarity_boost": 0.90, "style": 0.05},
+        "relief":      {"stability": 0.55, "similarity_boost": 0.75, "style": 0.40},
+        "neutral":     {"stability": 0.65, "similarity_boost": 0.80, "style": 0.20},
+    }.get(top, {"stability": 0.65, "similarity_boost": 0.80, "style": 0.20})
 
-    # Continuous arousal correction on top of discrete class tuning
-    # High arousal patient → slightly lower stability for more expressive response
+    # Continuous arousal correction — bigger swing for stronger emotions
     if arousal > 0.7:
-        tuning["stability"] = max(tuning["stability"] - 0.08, 0.30)
+        tuning["stability"] = max(tuning["stability"] - 0.15, 0.15)
+        tuning["style"]     = min(tuning["style"]     + 0.15, 1.00)
     elif arousal < 0.3:
-        tuning["stability"] = min(tuning["stability"] + 0.08, 0.90)
+        tuning["stability"] = min(tuning["stability"] + 0.15, 0.95)
+        tuning["style"]     = max(tuning["style"]     - 0.10, 0.00)
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.post(
