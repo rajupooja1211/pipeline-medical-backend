@@ -31,6 +31,12 @@ try:
 except ImportError:
     _LIBROSA_OK = False
 
+try:
+    import av as _av
+    _AV_OK = True
+except ImportError:
+    _AV_OK = False
+
 TARGET_SR    = 16000
 TRIM_SECONDS = 3
 
@@ -43,6 +49,37 @@ _classifier = True   # truthy = "ready"
 def load_model():
     """No-op: librosa needs no model download."""
     print("✅ Audio emotion ready instantly (librosa — no model download)")
+
+
+# ─────────────────────────────────────────────────────────
+# AUDIO LOADER — handles WebM/Opus from browser via PyAV
+# Falls back to librosa for WAV/FLAC/OGG
+# ─────────────────────────────────────────────────────────
+def _load_audio(audio_bytes: bytes):
+    """Decode audio bytes to float32 numpy array at TARGET_SR."""
+    # Try PyAV first — handles WebM/Opus that browsers send
+    if _AV_OK:
+        try:
+            container = _av.open(io.BytesIO(audio_bytes))
+            stream    = next(s for s in container.streams if s.type == "audio")
+            resampler = _av.audio.resampler.AudioResampler(
+                format="fltp", layout="mono", rate=TARGET_SR
+            )
+            frames = []
+            for packet in container.demux(stream):
+                for frame in packet.decode():
+                    resampled = resampler.resample(frame)
+                    for rf in (resampled if isinstance(resampled, list) else [resampled]):
+                        frames.append(rf.to_ndarray()[0])
+            container.close()
+            if frames:
+                return np.concatenate(frames).astype(np.float32), TARGET_SR
+        except Exception:
+            pass  # fall through to librosa
+
+    # Fallback: librosa (handles WAV, FLAC, OGG)
+    y, sr = librosa.load(io.BytesIO(audio_bytes), sr=TARGET_SR, mono=True)
+    return y, sr
 
 
 # ─────────────────────────────────────────────────────────
@@ -60,8 +97,8 @@ def analyse_audio_sync(audio_bytes: bytes) -> Dict:
     t_start = time.time()
 
     try:
-        # ── Load audio ────────────────────────────────────────
-        y, sr = librosa.load(io.BytesIO(audio_bytes), sr=TARGET_SR, mono=True)
+        # ── Load audio (av handles WebM/Opus from browser) ───
+        y, sr = _load_audio(audio_bytes)
         full_duration = len(y) / TARGET_SR
 
         # Trim to first TRIM_SECONDS — ~50% latency saving

@@ -410,7 +410,7 @@ async def whisper_transcribe(audio_bytes: bytes) -> tuple:
             "https://api.openai.com/v1/audio/transcriptions",
             headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
             files={"file": ("audio.webm", audio_bytes, "audio/webm")},
-            data={"model": "whisper-1"},
+            data={"model": "whisper-1", "language": "en"},
         )
     ms = (time.time() - start) * 1000
     if resp.status_code == 200:
