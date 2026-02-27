@@ -252,16 +252,19 @@ metrics_log:   List[dict]      = []
 # ═══════════════════════════════════════════════════════════
 # STARTUP — load SpeechBrain model once
 # ═══════════════════════════════════════════════════════════
+async def _load_model_background():
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, load_model)
+    print("✅ SpeechBrain model loaded and ready")
+
 @app.on_event("startup")
 async def startup_event():
     """
-    Runs when uvicorn starts.
-    SpeechBrain downloads ~300MB model on first run, then caches locally.
-    Subsequent restarts load from cache in ~3–5s.
+    Fire-and-forget model loading — port binds immediately so Render
+    health check passes, model downloads in background (~300MB first run).
     """
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, load_model)
-    print("🚀 Server ready — all models loaded")
+    asyncio.create_task(_load_model_background())
+    print("🚀 Server started — SpeechBrain loading in background")
 
 
 # ═══════════════════════════════════════════════════════════
