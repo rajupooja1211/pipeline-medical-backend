@@ -566,8 +566,7 @@ async def audio_emotion_chat(
 
     # ── Medical logic ──
     logic_start      = time.time()
-    question         = get_next_question(session, transcript)
-    final_response   = get_empathy_prefix(fused_emotions) + question
+    final_response   = get_next_question(session, transcript)
     logic_ms         = (time.time() - logic_start) * 1000
 
     # ── TTS with full emotion context ──
