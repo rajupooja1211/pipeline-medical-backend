@@ -237,7 +237,22 @@ def analyse_audio_sync(audio_bytes: bytes) -> Dict:
       latency_ms           — wall-clock inference time
     """
     if _classifier is None:
-        raise RuntimeError("Model not loaded. Call load_model() at startup.")
+        # Model still loading in background — return neutral fallback so the
+        # rest of the pipeline (Whisper + text sentiment + TTS) still works.
+        return {
+            "class_probabilities": {"neutral": 1.0},
+            "top_emotion":         "neutral",
+            "top_confidence":      0.0,
+            "arousal":             0.45,
+            "valence":             0.55,
+            "dominance":           0.50,
+            "stress_level":        0.0,
+            "medical_emotions":    {"neutral": 1.0},
+            "signal_features":     {},
+            "duration_sec":        0.0,
+            "latency_ms":          0.0,
+            "model_loading":       True,
+        }
 
     t_start = time.time()
 
